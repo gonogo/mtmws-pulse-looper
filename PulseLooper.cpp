@@ -29,8 +29,10 @@ public:
     uint32_t sample_count = 0;
 
     // ===== PARAMETERS =====
-    float speed = 1.0f;
-    float probability = 1.0f;
+    // speed_fp: Q16.16 fixed-point (1.0 = 65536)
+    uint32_t speed_fp = 65536;
+    // probability_fp: Q0.16 fixed-point (1.0 = 65535)
+    uint32_t probability_fp = 65535;
     uint32_t pulse_width = 1000;
 
     uint32_t pulse_timer = 0;
@@ -42,10 +44,10 @@ public:
     }
 
     // ===== RANDOM =====
-    float RandomFloat() {
+    uint32_t RandomFixed16() {
         static uint32_t lcg_seed = 1;
         lcg_seed = 1664525 * lcg_seed + 1013904223;
-        return (lcg_seed >> 16) / 65536.0f;
+        return (lcg_seed >> 16) & 0xFFFF; // 0..65535
     }
 
     // ===== TIME =====
@@ -64,8 +66,14 @@ public:
         sample_count++;
 
         // --- Read controls ---
-        speed = 0.5f + KnobVal(Knob::Main) * 1.5f / 4095.0f;
-        probability = KnobVal(Knob::X) / 4095.0f;
+        // speed_fp: 0.5..2.0 => Q16.16
+        uint32_t main_raw = KnobVal(Knob::Main);
+        speed_fp = 32768 + (main_raw * 98304 + 2047) / 4095;
+
+        // probability_fp: 0..1 => Q0.16
+        uint32_t x_raw = KnobVal(Knob::X);
+        probability_fp = (x_raw * 65535 + 2047) / 4095;
+
         pulse_width = 500 + KnobVal(Knob::Y) * 5000 / 4095;
 
         bool pulse_in = PulseIn1();
@@ -120,7 +128,7 @@ if (recording && pulse_off) {
         if (playing && event_count > 0) {
         
 
-            accumulator += (uint32_t)(GetSampleTime() * speed);
+            accumulator += (uint32_t)(GetSampleTime() * speed_fp);
             if (accumulator >= 200) {
                 // If pulse is true, leave it up for a while to make sure it triggers??
                 PulseOut1(false);
