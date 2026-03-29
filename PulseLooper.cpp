@@ -28,9 +28,14 @@ public:
 
     uint32_t sample_count = 0;
 
+    // Fixed-point: Q16.16, FP_ONE = 1.0 (speed 0.5..2.0, probability 0..1)
+    static const uint32_t FP_ONE = 65536;
+    static const uint32_t FP_HALF = FP_ONE / 2;
+    static const uint32_t FP_ONE_POINT_FIVE = FP_ONE + FP_ONE / 2;
+
     // ===== PARAMETERS =====
-    float speed = 1.0f;
-    float probability = 1.0f;
+    uint32_t speed_fp = FP_ONE;
+    uint32_t probability_fp = FP_ONE;
     uint32_t pulse_width = 1000;
 
     uint32_t pulse_timer = 0;
@@ -42,10 +47,11 @@ public:
     }
 
     // ===== RANDOM =====
-    float RandomFloat() {
+    // Uniform [0, 65535], same scale as probability_fp (compare < threshold)
+    uint32_t RandomU16() {
         static uint32_t lcg_seed = 1;
         lcg_seed = 1664525 * lcg_seed + 1013904223;
-        return (lcg_seed >> 16) / 65536.0f;
+        return (lcg_seed >> 16) & 0xFFFFu;
     }
 
     // ===== TIME =====
@@ -64,8 +70,14 @@ public:
         sample_count++;
 
         // --- Read controls ---
-        speed = 0.5f + KnobVal(Knob::Main) * 1.5f / 4095.0f;
-        probability = KnobVal(Knob::X) / 4095.0f;
+        int32_t main_knob = KnobVal(Knob::Main);
+        int32_t x_knob = KnobVal(Knob::X);
+        if (main_knob < 0) main_knob = 0;
+        if (main_knob > 4095) main_knob = 4095;
+        if (x_knob < 0) x_knob = 0;
+        if (x_knob > 4095) x_knob = 4095;
+        speed_fp = FP_HALF + (uint32_t)(main_knob * (int32_t)FP_ONE_POINT_FIVE) / 4095u;
+        probability_fp = ((uint32_t)x_knob * FP_ONE) / 4095u;
         pulse_width = 500 + KnobVal(Knob::Y) * 5000 / 4095;
 
         bool pulse_in = PulseIn1();
@@ -120,7 +132,7 @@ if (recording && pulse_off) {
         if (playing && event_count > 0) {
         
 
-            accumulator += (uint32_t)(GetSampleTime() * speed);
+            accumulator += (GetSampleTime() * speed_fp) >> 16;
             if (accumulator >= 200) {
                 // If pulse is true, leave it up for a while to make sure it triggers??
                 PulseOut1(false);
@@ -131,7 +143,7 @@ if (recording && pulse_off) {
                 accumulator = 0;
 
                 // probability
-                //if (RandomFloat() < probability) {
+                //if (RandomU16() < probability_fp) {
                     PulseOut1(true);
                     if (playHead2 == 1) {
                         playHead2 = 0;
