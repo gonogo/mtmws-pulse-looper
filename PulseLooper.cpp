@@ -22,6 +22,9 @@ public:
     uint32_t play_index = 0;
 
     uint32_t accumulator = 0;
+    
+    uint32_t playHead1 = 0;
+    uint32_t playHead2 = 0;
 
     uint32_t sample_count = 0;
 
@@ -66,6 +69,7 @@ public:
         pulse_width = 500 + KnobVal(Knob::Y) * 5000 / 4095;
 
         bool pulse_in = PulseIn1();
+        bool pulse_off = PulseIn1FallingEdge();
         bool reset_in = PulseIn2();
         bool rec_in = SwitchVal() == Switch::Up; // assuming switch for record
 
@@ -74,33 +78,37 @@ public:
         // --- RECORD LOGIC ---
         if (rec_in && !recording) {
             recording = true;
-            LedOn(4);
+            LedOn(0);
             event_count = 0;
         }
 
         if (!rec_in && recording) {
+            LedOff(0);
             recording = false;
-            LedOff(4);
-            LedOff(1);
             playing = true;
             play_index = 0;
             accumulator = 0;
         }
 
         if (recording && pulse_in) {
+            LedOn(4);
             if (event_count == 0) {
                 last_time = now;
+                uint32_t dt = 0;
+                events[event_count++].dt = dt;
             } else {
                 uint32_t dt = now - last_time;
 
                 if (dt > 200 && event_count < MAX_EVENTS) {
                     events[event_count++].dt = dt;
-                    LedOn(1);
                 }
 
                 last_time = now;
             }
         }
+if (recording && pulse_off) {
+            LedOff(4);
+}
 
         // --- RESET ---
         if (reset_in) {
@@ -118,14 +126,27 @@ public:
                 accumulator = 0;
 
                 // probability
-                if (RandomFloat() < probability) {
+                //if (RandomFloat() < probability) {
                     PulseOut1(true);
-                    pulse_timer = pulse_width;
-                }
+                    if (playHead2 == 1) {
+                        playHead2 = 0;
+                        playHead1 = 1;
+                        LedOn(2);
+                        LedOff(3);
+                    } else {
+                        playHead1 = 0;
+                        playHead2 = 1;
+                        LedOn(3);
+                        LedOff(2);
+                    }
+                //    pulse_timer = pulse_width;
+                //}
 
                 play_index++;
                 if (play_index >= event_count) play_index = 0;
             }
+        } else {
+            PulseOut1(false);
         }
 
         // --- Pulse OFF timing ---
