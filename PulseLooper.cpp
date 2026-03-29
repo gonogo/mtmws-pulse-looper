@@ -118,8 +118,13 @@ if (recording && pulse_off) {
 
         // --- PLAYBACK ---
         if (playing && event_count > 0) {
+        
 
             accumulator += (uint32_t)(GetSampleTime() * speed);
+            if (accumulator >= 200) {
+                // If pulse is true, leave it up for a while to make sure it triggers??
+                PulseOut1(false);
+            }
 
             if (accumulator >= events[play_index].dt) {
 
@@ -145,8 +150,6 @@ if (recording && pulse_off) {
                 play_index++;
                 if (play_index >= event_count) play_index = 0;
             }
-        } else {
-            PulseOut1(false);
         }
 
         // --- Pulse OFF timing ---
